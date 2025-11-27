@@ -3,6 +3,53 @@ import EventKit
 import Combine
 import UserNotifications
 
+/// Represents pending sync changes before they are committed
+struct PendingSyncChanges: Equatable {
+    var toCreate: Int = 0
+    var toUpdate: Int = 0
+    var toDelete: Int = 0
+    
+    var total: Int { toCreate + toUpdate + toDelete }
+    var isEmpty: Bool { total == 0 }
+    
+    var description: String {
+        var parts: [String] = []
+        if toCreate > 0 { parts.append("\(toCreate) to create") }
+        if toUpdate > 0 { parts.append("\(toUpdate) to update") }
+        if toDelete > 0 { parts.append("\(toDelete) to delete") }
+        return parts.isEmpty ? "No changes" : parts.joined(separator: ", ")
+    }
+}
+
+/// Represents an event or recurring series to be synced
+struct SyncableEvent {
+    let event: EKEvent
+    let seriesId: String  // Unique ID for the series (same for all occurrences)
+    let isRecurring: Bool
+    let recurrenceRules: [EKRecurrenceRule]?
+    
+    /// Creates a SyncableEvent from an EKEvent
+    static func from(_ event: EKEvent, useSeriesTracking: Bool) -> SyncableEvent {
+        let isRecurring = event.hasRecurrenceRules
+        
+        // For recurring events, use calendarItemExternalIdentifier if available
+        // This ID is stable across all occurrences of a recurring event
+        let seriesId: String
+        if useSeriesTracking && isRecurring, let externalId = event.calendarItemExternalIdentifier {
+            seriesId = externalId
+        } else {
+            seriesId = event.eventIdentifier ?? UUID().uuidString
+        }
+        
+        return SyncableEvent(
+            event: event,
+            seriesId: seriesId,
+            isRecurring: isRecurring,
+            recurrenceRules: isRecurring ? event.recurrenceRules : nil
+        )
+    }
+}
+
 /// The core sync engine that manages calendar synchronization
 class SyncEngine: ObservableObject {
     let eventStore = EKEventStore()
@@ -11,6 +58,7 @@ class SyncEngine: ObservableObject {
     @Published var lastSyncTime: Date?
     @Published var isSyncing = false
     @Published var isSyncEnabled = true
+    @Published var pendingChanges = PendingSyncChanges()
     
     private var syncTimer: Timer?
     private var lastSyncCompletedTime: Date?
@@ -87,6 +135,132 @@ class SyncEngine: ObservableObject {
     
     // MARK: - Sync Logic
     
+    /// Gathers calendar data for sync analysis
+    private func gatherCalendarData() -> (syncableEvents: [String: [SyncableEvent]], existingBlocks: [String: [EKEvent]], enabledCalendars: [EKCalendar])? {
+        let enabledCalendars = calendars.filter { enabledCalendarIds.contains($0.calendarIdentifier) }
+        
+        guard enabledCalendars.count >= 2 else {
+            return nil
+        }
+        
+        let syncWindow = settings.syncWindowDays
+        let startDate = Date()
+        let endDate = Calendar.current.date(byAdding: .day, value: syncWindow, to: startDate)!
+        let useSeriesTracking = settings.syncRecurringAsSeries
+        
+        var syncableEventsByCalendar: [String: [SyncableEvent]] = [:]
+        var existingBlocksByCalendar: [String: [EKEvent]] = [:]
+        
+        for calendar in enabledCalendars {
+            let predicate = eventStore.predicateForEvents(
+                withStart: startDate,
+                end: endDate,
+                calendars: [calendar]
+            )
+            
+            let events = eventStore.events(matching: predicate)
+            
+            var realEvents: [SyncableEvent] = []
+            var blocks: [EKEvent] = []
+            
+            // Track series we've already seen (for deduplication)
+            var seenSeriesIds = Set<String>()
+            
+            for event in events {
+                if isBlockEvent(event) {
+                    blocks.append(event)
+                } else {
+                    let syncable = SyncableEvent.from(event, useSeriesTracking: useSeriesTracking)
+                    
+                    // If tracking recurring series, only keep first occurrence
+                    if useSeriesTracking && syncable.isRecurring {
+                        if seenSeriesIds.contains(syncable.seriesId) {
+                            continue  // Skip duplicate occurrence
+                        }
+                        seenSeriesIds.insert(syncable.seriesId)
+                    }
+                    
+                    realEvents.append(syncable)
+                }
+            }
+            
+            syncableEventsByCalendar[calendar.calendarIdentifier] = realEvents
+            existingBlocksByCalendar[calendar.calendarIdentifier] = blocks
+        }
+        
+        return (syncableEventsByCalendar, existingBlocksByCalendar, enabledCalendars)
+    }
+    
+    /// Calculates what changes would be made without actually making them
+    @MainActor
+    func calculatePendingChanges() async {
+        guard !isSyncing else { return }
+        
+        guard let data = gatherCalendarData() else {
+            pendingChanges = PendingSyncChanges()
+            return
+        }
+        
+        let (syncableEventsByCalendar, existingBlocksByCalendar, enabledCalendars) = data
+        
+        var toCreate = 0
+        var toUpdate = 0
+        var toDelete = 0
+        
+        for targetCalendar in enabledCalendars {
+            let targetId = targetCalendar.calendarIdentifier
+            let existingBlocks = existingBlocksByCalendar[targetId] ?? []
+            
+            var expectedBlockIds = Set<String>()
+            
+            for sourceCalendar in enabledCalendars {
+                let sourceId = sourceCalendar.calendarIdentifier
+                guard sourceId != targetId else { continue }
+                
+                let sourceSyncables = syncableEventsByCalendar[sourceId] ?? []
+                
+                for syncable in sourceSyncables {
+                    let sourceEvent = syncable.event
+                    
+                    if sourceEvent.isAllDay && !settings.syncAllDayEvents {
+                        continue
+                    }
+                    
+                    // Use seriesId for recurring events, eventIdentifier for regular events
+                    let blockId = generateBlockId(sourceCalendarId: sourceId, sourceEventId: syncable.seriesId)
+                    expectedBlockIds.insert(blockId)
+                    
+                    let existingBlock = existingBlocks.first { event in
+                        getBlockId(from: event) == blockId
+                    }
+                    
+                    if let existing = existingBlock {
+                        // For recurring events, we compare the first occurrence
+                        if existing.startDate != sourceEvent.startDate ||
+                           existing.endDate != sourceEvent.endDate {
+                            toUpdate += 1
+                        }
+                    } else {
+                        toCreate += 1
+                    }
+                }
+            }
+            
+            for existingBlock in existingBlocks {
+                if let blockId = getBlockId(from: existingBlock),
+                   !expectedBlockIds.contains(blockId) {
+                    toDelete += 1
+                }
+            }
+        }
+        
+        pendingChanges = PendingSyncChanges(toCreate: toCreate, toUpdate: toUpdate, toDelete: toDelete)
+        
+        if !pendingChanges.isEmpty {
+            Logger.shared.log("Pending changes: \(pendingChanges.description)")
+        }
+    }
+    
     @MainActor
     func performSync() async {
         guard isSyncEnabled else {
@@ -112,49 +286,24 @@ class SyncEngine: ObservableObject {
         defer { 
             isSyncing = false
             lastSyncCompletedTime = Date()
+            // Clear pending changes after sync
+            pendingChanges = PendingSyncChanges()
         }
         
         Logger.shared.log("Starting sync...")
         
-        let enabledCalendars = calendars.filter { enabledCalendarIds.contains($0.calendarIdentifier) }
-        
-        guard enabledCalendars.count >= 2 else {
+        guard let data = gatherCalendarData() else {
             Logger.shared.log("Sync skipped - need at least 2 enabled calendars")
             return
         }
         
-        let syncWindow = settings.syncWindowDays
-        let startDate = Date()
-        let endDate = Calendar.current.date(byAdding: .day, value: syncWindow, to: startDate)!
-        
-        // Step 1: Gather all real events (non-synced blocks) from all calendars
-        var realEventsByCalendar: [String: [EKEvent]] = [:]
-        var existingBlocksByCalendar: [String: [EKEvent]] = [:]
+        let (syncableEventsByCalendar, existingBlocksByCalendar, enabledCalendars) = data
         
         for calendar in enabledCalendars {
-            let predicate = eventStore.predicateForEvents(
-                withStart: startDate,
-                end: endDate,
-                calendars: [calendar]
-            )
-            
-            let events = eventStore.events(matching: predicate)
-            
-            var realEvents: [EKEvent] = []
-            var blocks: [EKEvent] = []
-            
-            for event in events {
-                if isBlockEvent(event) {
-                    blocks.append(event)
-                } else {
-                    realEvents.append(event)
-                }
-            }
-            
-            realEventsByCalendar[calendar.calendarIdentifier] = realEvents
-            existingBlocksByCalendar[calendar.calendarIdentifier] = blocks
-            
-            Logger.shared.log("Calendar '\(calendar.title)': \(realEvents.count) events, \(blocks.count) existing blocks")
+            let syncables = syncableEventsByCalendar[calendar.calendarIdentifier] ?? []
+            let blocks = existingBlocksByCalendar[calendar.calendarIdentifier] ?? []
+            let recurringCount = syncables.filter { $0.isRecurring }.count
+            Logger.shared.log("Calendar '\(calendar.title)': \(syncables.count) events (\(recurringCount) recurring series), \(blocks.count) existing blocks")
         }
         
         // Step 2: For each calendar, create/update blocks for events from other calendars
@@ -176,16 +325,18 @@ class SyncEngine: ObservableObject {
                 // Skip own calendar
                 guard sourceId != targetId else { continue }
                 
-                let sourceEvents = realEventsByCalendar[sourceId] ?? []
+                let sourceSyncables = syncableEventsByCalendar[sourceId] ?? []
                 
-                for sourceEvent in sourceEvents {
+                for syncable in sourceSyncables {
+                    let sourceEvent = syncable.event
+                    
                     // Skip all-day events if configured
                     if sourceEvent.isAllDay && !settings.syncAllDayEvents {
                         continue
                     }
                     
-                    guard let sourceEventId = sourceEvent.eventIdentifier else { continue }
-                    let blockId = generateBlockId(sourceCalendarId: sourceId, sourceEventId: sourceEventId)
+                    // Use seriesId for recurring events (stable across occurrences)
+                    let blockId = generateBlockId(sourceCalendarId: sourceId, sourceEventId: syncable.seriesId)
                     expectedBlockIds.insert(blockId)
                     
                     // Check if block already exists
@@ -194,12 +345,19 @@ class SyncEngine: ObservableObject {
                     }
                     
                     if let existing = existingBlock {
-                        // Update if changed
+                        // Update if changed (for recurring, this updates the first occurrence time)
                         if existing.startDate != sourceEvent.startDate ||
                            existing.endDate != sourceEvent.endDate {
                             existing.startDate = sourceEvent.startDate
                             existing.endDate = sourceEvent.endDate
-                            try? eventStore.save(existing, span: .thisEvent)
+                            
+                            // For recurring events, also update recurrence rules
+                            if syncable.isRecurring && settings.syncRecurringAsSeries {
+                                existing.recurrenceRules = syncable.recurrenceRules
+                                try? eventStore.save(existing, span: .futureEvents)
+                            } else {
+                                try? eventStore.save(existing, span: .thisEvent)
+                            }
                             blocksUpdated += 1
                         }
                     } else {
@@ -207,7 +365,7 @@ class SyncEngine: ObservableObject {
                         let accountName = getAccountName(for: sourceCalendar)
                         createBlock(
                             in: targetCalendar,
-                            for: sourceEvent,
+                            for: syncable,
                             sourceCalendarId: sourceId,
                             accountName: accountName
                         )
@@ -220,7 +378,9 @@ class SyncEngine: ObservableObject {
             for existingBlock in existingBlocks {
                 if let blockId = getBlockId(from: existingBlock),
                    !expectedBlockIds.contains(blockId) {
-                    try? eventStore.remove(existingBlock, span: .thisEvent)
+                    // For recurring blocks, delete the entire series
+                    let span: EKSpan = existingBlock.hasRecurrenceRules ? .futureEvents : .thisEvent
+                    try? eventStore.remove(existingBlock, span: span)
                     blocksDeleted += 1
                 }
             }
@@ -275,8 +435,9 @@ class SyncEngine: ObservableObject {
         return nil
     }
     
-    private func createBlock(in calendar: EKCalendar, for sourceEvent: EKEvent, sourceCalendarId: String, accountName: String) {
+    private func createBlock(in calendar: EKCalendar, for syncable: SyncableEvent, sourceCalendarId: String, accountName: String) {
         let block = EKEvent(eventStore: eventStore)
+        let sourceEvent = syncable.event
         
         // Set title based on format preference
         let titleFormat = settings.blockTitleFormat
@@ -287,16 +448,26 @@ class SyncEngine: ObservableObject {
         block.isAllDay = sourceEvent.isAllDay
         block.calendar = calendar
         
-        // Add marker in notes for identification
-        let eventId = sourceEvent.eventIdentifier ?? UUID().uuidString
-        let marker = "\(Self.blockMarkerPrefix)source=\(sourceCalendarId):id=\(eventId)\(Self.blockMarkerSuffix)"
+        // For recurring events, copy the recurrence rules if setting is enabled
+        if syncable.isRecurring && settings.syncRecurringAsSeries {
+            block.recurrenceRules = syncable.recurrenceRules
+        }
+        
+        // Add marker in notes for identification (use seriesId for recurring events)
+        let marker = "\(Self.blockMarkerPrefix)source=\(sourceCalendarId):id=\(syncable.seriesId):recurring=\(syncable.isRecurring)\(Self.blockMarkerSuffix)"
         block.notes = marker
         
         // Set as busy
         block.availability = .busy
         
         do {
-            try eventStore.save(block, span: .thisEvent)
+            // For recurring events with series tracking, save future events too
+            let span: EKSpan = (syncable.isRecurring && settings.syncRecurringAsSeries) ? .futureEvents : .thisEvent
+            try eventStore.save(block, span: span)
+            
+            if syncable.isRecurring {
+                Logger.shared.log("Created recurring block series for '\(accountName)'")
+            }
         } catch {
             Logger.shared.log("Error creating block: \(error.localizedDescription)")
         }

@@ -146,4 +146,75 @@ public struct SyncLogic {
     public static func formatBlockTitle(format: String, sourceName: String) -> String {
         return format.replacingOccurrences(of: "{source_name}", with: sourceName)
     }
+    
+    // MARK: - Recurring Event Handling
+    
+    /// Determines the series ID for an event
+    /// - Parameters:
+    ///   - isRecurring: Whether the event is recurring
+    ///   - externalId: The calendarItemExternalIdentifier (stable across occurrences)
+    ///   - eventId: The eventIdentifier (unique per occurrence)
+    ///   - useSeriesTracking: Whether to use series tracking
+    /// - Returns: The appropriate ID to use for tracking
+    public static func getSeriesId(
+        isRecurring: Bool,
+        externalId: String?,
+        eventId: String?,
+        useSeriesTracking: Bool
+    ) -> String {
+        if useSeriesTracking && isRecurring, let externalId = externalId {
+            return externalId
+        }
+        return eventId ?? UUID().uuidString
+    }
+    
+    /// Checks if a recurring event occurrence has already been seen
+    /// - Parameters:
+    ///   - seriesId: The series ID of the event
+    ///   - seenSeriesIds: Set of already seen series IDs
+    /// - Returns: True if this is a duplicate occurrence
+    public static func isDuplicateOccurrence(
+        seriesId: String,
+        seenSeriesIds: Set<String>
+    ) -> Bool {
+        return seenSeriesIds.contains(seriesId)
+    }
+    
+    /// Determines the appropriate save span for an event
+    /// - Parameters:
+    ///   - isRecurring: Whether the event is recurring
+    ///   - syncRecurringAsSeries: Whether recurring events should sync as series
+    /// - Returns: "futureEvents" for recurring series, "thisEvent" otherwise
+    public static func getSaveSpan(
+        isRecurring: Bool,
+        syncRecurringAsSeries: Bool
+    ) -> String {
+        return (isRecurring && syncRecurringAsSeries) ? "futureEvents" : "thisEvent"
+    }
+}
+
+// MARK: - PendingSyncChanges
+
+/// Represents pending sync changes before they are committed
+public struct PendingSyncChanges: Equatable {
+    public var toCreate: Int
+    public var toUpdate: Int
+    public var toDelete: Int
+    
+    public init(toCreate: Int = 0, toUpdate: Int = 0, toDelete: Int = 0) {
+        self.toCreate = toCreate
+        self.toUpdate = toUpdate
+        self.toDelete = toDelete
+    }
+    
+    public var total: Int { toCreate + toUpdate + toDelete }
+    public var isEmpty: Bool { total == 0 }
+    
+    public var description: String {
+        var parts: [String] = []
+        if toCreate > 0 { parts.append("\(toCreate) to create") }
+        if toUpdate > 0 { parts.append("\(toUpdate) to update") }
+        if toDelete > 0 { parts.append("\(toDelete) to delete") }
+        return parts.isEmpty ? "No changes" : parts.joined(separator: ", ")
+    }
 }

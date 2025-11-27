@@ -11,6 +11,8 @@ A macOS menu bar app that syncs busy time blocks across multiple calendars. Perf
 - 📅 **Works with Enterprise Accounts** - Uses macOS native calendar integration
 - 🔔 **Notifications** - Get notified when sync completes
 - 🚀 **Launch at Login** - Optionally start with macOS
+- 🔢 **Pending Changes Badge** - See how many changes are pending before sync
+- 🔁 **Smart Recurring Events** - Recurring events sync as a single series, not individual blocks
 
 ## How It Works
 
@@ -96,6 +98,7 @@ cp -r .build/release/CalSync.app /Applications/
 | Sync Window | How far ahead to sync | 14 days |
 | Block Title Format | Format for busy blocks | `Busy - {source_name}` |
 | Sync All-Day Events | Include all-day events | Off |
+| Sync Recurring as Series | Sync recurring events as a single series instead of individual blocks | On |
 | Show Notifications | Notify on sync completion | On |
 | Launch at Login | Start CalSync with macOS | Off |
 

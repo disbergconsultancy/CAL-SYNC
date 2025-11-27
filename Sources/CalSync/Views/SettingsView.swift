@@ -66,6 +66,8 @@ struct GeneralSettingsView: View {
             
             Section {
                 Toggle("Sync all-day events", isOn: $settings.syncAllDayEvents)
+                Toggle("Sync recurring events as series", isOn: $settings.syncRecurringAsSeries)
+                    .help("When enabled, recurring events create a single recurring block instead of individual blocks for each occurrence")
                 Toggle("Show notifications", isOn: $settings.showNotifications)
                 LaunchAtLogin.Toggle("Launch at login")
             } header: {

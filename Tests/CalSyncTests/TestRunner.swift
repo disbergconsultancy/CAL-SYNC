@@ -312,6 +312,180 @@ func runSyncLogicTests() {
     }
 }
 
+// MARK: - Pending Sync Changes Tests
+
+func runPendingSyncChangesTests() {
+    print("\n📋 Pending Sync Changes Tests")
+    print("=".padding(toLength: 50, withPad: "=", startingAt: 0))
+    
+    // Total calculation
+    test("PEND-001: Total is sum of all changes") {
+        let changes = PendingSyncChanges(toCreate: 5, toUpdate: 3, toDelete: 2)
+        expectEqual(changes.total, 10)
+    }
+    
+    test("PEND-001: Total is zero for empty changes") {
+        let changes = PendingSyncChanges()
+        expectEqual(changes.total, 0)
+    }
+    
+    // isEmpty property
+    test("PEND-002: isEmpty true when all zero") {
+        let changes = PendingSyncChanges(toCreate: 0, toUpdate: 0, toDelete: 0)
+        expect(changes.isEmpty == true)
+    }
+    
+    test("PEND-002: isEmpty false with creates") {
+        let changes = PendingSyncChanges(toCreate: 1, toUpdate: 0, toDelete: 0)
+        expect(changes.isEmpty == false)
+    }
+    
+    test("PEND-002: isEmpty false with updates") {
+        let changes = PendingSyncChanges(toCreate: 0, toUpdate: 1, toDelete: 0)
+        expect(changes.isEmpty == false)
+    }
+    
+    test("PEND-002: isEmpty false with deletes") {
+        let changes = PendingSyncChanges(toCreate: 0, toUpdate: 0, toDelete: 1)
+        expect(changes.isEmpty == false)
+    }
+    
+    // Description formatting
+    test("PEND-003: Description for empty changes") {
+        let changes = PendingSyncChanges()
+        expectEqual(changes.description, "No changes")
+    }
+    
+    test("PEND-003: Description with only creates") {
+        let changes = PendingSyncChanges(toCreate: 3, toUpdate: 0, toDelete: 0)
+        expectEqual(changes.description, "3 to create")
+    }
+    
+    test("PEND-003: Description with only updates") {
+        let changes = PendingSyncChanges(toCreate: 0, toUpdate: 2, toDelete: 0)
+        expectEqual(changes.description, "2 to update")
+    }
+    
+    test("PEND-003: Description with only deletes") {
+        let changes = PendingSyncChanges(toCreate: 0, toUpdate: 0, toDelete: 5)
+        expectEqual(changes.description, "5 to delete")
+    }
+    
+    test("PEND-003: Description with all types") {
+        let changes = PendingSyncChanges(toCreate: 2, toUpdate: 3, toDelete: 1)
+        expectEqual(changes.description, "2 to create, 3 to update, 1 to delete")
+    }
+    
+    // Equatable
+    test("PEND-004: Equal changes are equal") {
+        let changes1 = PendingSyncChanges(toCreate: 1, toUpdate: 2, toDelete: 3)
+        let changes2 = PendingSyncChanges(toCreate: 1, toUpdate: 2, toDelete: 3)
+        expect(changes1 == changes2)
+    }
+    
+    test("PEND-004: Different changes are not equal") {
+        let changes1 = PendingSyncChanges(toCreate: 1, toUpdate: 2, toDelete: 3)
+        let changes2 = PendingSyncChanges(toCreate: 1, toUpdate: 2, toDelete: 4)
+        expect(changes1 != changes2)
+    }
+}
+
+// MARK: - Recurring Event Handling Tests
+
+func runRecurringEventTests() {
+    print("\n📋 Recurring Event Handling Tests")
+    print("=".padding(toLength: 50, withPad: "=", startingAt: 0))
+    
+    // Series ID generation
+    test("REC-001: Recurring event uses externalId with series tracking") {
+        let seriesId = SyncLogic.getSeriesId(
+            isRecurring: true,
+            externalId: "external-abc",
+            eventId: "event-123",
+            useSeriesTracking: true
+        )
+        expectEqual(seriesId, "external-abc")
+    }
+    
+    test("REC-001: Recurring event uses eventId without series tracking") {
+        let seriesId = SyncLogic.getSeriesId(
+            isRecurring: true,
+            externalId: "external-abc",
+            eventId: "event-123",
+            useSeriesTracking: false
+        )
+        expectEqual(seriesId, "event-123")
+    }
+    
+    test("REC-001: Non-recurring event uses eventId") {
+        let seriesId = SyncLogic.getSeriesId(
+            isRecurring: false,
+            externalId: "external-abc",
+            eventId: "event-123",
+            useSeriesTracking: true
+        )
+        expectEqual(seriesId, "event-123")
+    }
+    
+    test("REC-001: Recurring without externalId uses eventId") {
+        let seriesId = SyncLogic.getSeriesId(
+            isRecurring: true,
+            externalId: nil,
+            eventId: "event-123",
+            useSeriesTracking: true
+        )
+        expectEqual(seriesId, "event-123")
+    }
+    
+    test("REC-001: No IDs generates UUID") {
+        let seriesId = SyncLogic.getSeriesId(
+            isRecurring: true,
+            externalId: nil,
+            eventId: nil,
+            useSeriesTracking: true
+        )
+        // UUID should be 36 characters
+        expect(seriesId.count == 36)
+    }
+    
+    // Duplicate occurrence detection
+    test("REC-002: First occurrence is not duplicate") {
+        let seenIds = Set<String>()
+        expect(SyncLogic.isDuplicateOccurrence(seriesId: "series-1", seenSeriesIds: seenIds) == false)
+    }
+    
+    test("REC-002: Second occurrence is duplicate") {
+        let seenIds = Set(["series-1", "series-2"])
+        expect(SyncLogic.isDuplicateOccurrence(seriesId: "series-1", seenSeriesIds: seenIds) == true)
+    }
+    
+    test("REC-002: Different series is not duplicate") {
+        let seenIds = Set(["series-1"])
+        expect(SyncLogic.isDuplicateOccurrence(seriesId: "series-2", seenSeriesIds: seenIds) == false)
+    }
+    
+    // Save span determination
+    test("REC-003: Recurring with series sync uses futureEvents") {
+        let span = SyncLogic.getSaveSpan(isRecurring: true, syncRecurringAsSeries: true)
+        expectEqual(span, "futureEvents")
+    }
+    
+    test("REC-003: Recurring without series sync uses thisEvent") {
+        let span = SyncLogic.getSaveSpan(isRecurring: true, syncRecurringAsSeries: false)
+        expectEqual(span, "thisEvent")
+    }
+    
+    test("REC-003: Non-recurring event uses thisEvent") {
+        let span = SyncLogic.getSaveSpan(isRecurring: false, syncRecurringAsSeries: true)
+        expectEqual(span, "thisEvent")
+    }
+    
+    test("REC-003: Non-recurring without series sync uses thisEvent") {
+        let span = SyncLogic.getSaveSpan(isRecurring: false, syncRecurringAsSeries: false)
+        expectEqual(span, "thisEvent")
+    }
+}
+
 // MARK: - Settings Tests
 
 func runSettingsTests() {
@@ -419,6 +593,8 @@ struct TestRunner {
         
         runBlockMarkerTests()
         runSyncLogicTests()
+        runPendingSyncChangesTests()
+        runRecurringEventTests()
         runSettingsTests()
         
         print("\n" + "=".padding(toLength: 50, withPad: "=", startingAt: 0))

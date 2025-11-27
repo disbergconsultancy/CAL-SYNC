@@ -8,6 +8,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var popover: NSPopover?
     var settingsWindow: NSWindow?
     let syncEngine = SyncEngine()
+    private var pendingCheckTimer: Timer?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide dock icon - this is a menu bar only app
@@ -25,6 +26,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Start sync timer
         syncEngine.startSyncTimer()
         
+        // Start pending changes check timer
+        startPendingCheckTimer()
+        
         // Listen for calendar changes
         NotificationCenter.default.addObserver(
             self,
@@ -36,6 +40,80 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     
     func applicationWillTerminate(_ notification: Notification) {
         syncEngine.stopSyncTimer()
+        pendingCheckTimer?.invalidate()
+    }
+    
+    // MARK: - Pending Changes Timer
+    
+    private func startPendingCheckTimer() {
+        pendingCheckTimer?.invalidate()
+        // Check for pending changes every 30 seconds
+        pendingCheckTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task {
+                await self?.syncEngine.calculatePendingChanges()
+            }
+        }
+        // Also run immediately
+        Task {
+            await syncEngine.calculatePendingChanges()
+        }
+    }
+    
+    private func updateMenuBarBadge() {
+        guard let button = statusItem?.button else { return }
+        
+        let pendingCount = syncEngine.pendingChanges.total
+        
+        if pendingCount > 0 {
+            // Create badge image with count
+            let badgeImage = createBadgedIcon(count: pendingCount)
+            button.image = badgeImage
+        } else {
+            // Reset to normal icon
+            button.image = NSImage(systemSymbolName: "calendar.badge.clock", accessibilityDescription: "CalSync")
+        }
+    }
+    
+    private func createBadgedIcon(count: Int) -> NSImage {
+        let size = NSSize(width: 22, height: 22)
+        let image = NSImage(size: size)
+        
+        image.lockFocus()
+        
+        // Draw base calendar icon
+        if let baseIcon = NSImage(systemSymbolName: "calendar", accessibilityDescription: nil) {
+            let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+            if let configuredIcon = baseIcon.withSymbolConfiguration(config) {
+                configuredIcon.draw(in: NSRect(x: 0, y: 2, width: 16, height: 16))
+            }
+        }
+        
+        // Draw badge circle
+        let badgeSize: CGFloat = 12
+        let badgeRect = NSRect(x: size.width - badgeSize, y: size.height - badgeSize, width: badgeSize, height: badgeSize)
+        
+        NSColor.systemOrange.setFill()
+        NSBezierPath(ovalIn: badgeRect).fill()
+        
+        // Draw count text
+        let displayCount = count > 9 ? "9+" : "\(count)"
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 8, weight: .bold),
+            .foregroundColor: NSColor.white
+        ]
+        let textSize = displayCount.size(withAttributes: attributes)
+        let textRect = NSRect(
+            x: badgeRect.midX - textSize.width / 2,
+            y: badgeRect.midY - textSize.height / 2,
+            width: textSize.width,
+            height: textSize.height
+        )
+        displayCount.draw(in: textRect, withAttributes: attributes)
+        
+        image.unlockFocus()
+        image.isTemplate = false
+        
+        return image
     }
     
     private func requestCalendarAccess() {
@@ -142,6 +220,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         syncStatusItem.isEnabled = false
         menu.addItem(syncStatusItem)
         
+        // Pending changes status
+        let pendingStatusItem = NSMenuItem(title: "Pending: No changes", action: nil, keyEquivalent: "")
+        pendingStatusItem.tag = 102 // Tag for updating later
+        pendingStatusItem.isEnabled = false
+        menu.addItem(pendingStatusItem)
+        
         menu.addItem(NSMenuItem.separator())
         
         // Sync toggle
@@ -196,9 +280,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 self?.updateCalendarsMenu()
             }
             .store(in: &cancellables)
+        
+        // Update pending changes display
+        syncEngine.$pendingChanges
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updatePendingStatus()
+            }
+            .store(in: &cancellables)
     }
     
     private var cancellables = Set<AnyCancellable>()
+    
+    private func updatePendingStatus() {
+        // Update menu item
+        if let menu = statusItem?.menu,
+           let pendingStatusItem = menu.item(withTag: 102) {
+            let changes = syncEngine.pendingChanges
+            if changes.isEmpty {
+                pendingStatusItem.title = "Pending: No changes"
+            } else {
+                pendingStatusItem.title = "Pending: \(changes.description)"
+            }
+        }
+        
+        // Update menu bar badge
+        updateMenuBarBadge()
+    }
     
     private func updateSyncStatus() {
         guard let menu = statusItem?.menu,

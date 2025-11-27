@@ -14,6 +14,7 @@ class Settings: ObservableObject {
         static let syncAllDayEvents = "syncAllDayEvents"
         static let showNotifications = "showNotifications"
         static let launchAtLogin = "launchAtLogin"
+        static let syncRecurringAsSeries = "syncRecurringAsSeries"
     }
     
     // MARK: - Settings Properties
@@ -54,6 +55,12 @@ class Settings: ObservableObject {
         }
     }
     
+    @Published var syncRecurringAsSeries: Bool {
+        didSet {
+            defaults.set(syncRecurringAsSeries, forKey: Keys.syncRecurringAsSeries)
+        }
+    }
+    
     // MARK: - Initialization
     
     private init() {
@@ -64,7 +71,8 @@ class Settings: ObservableObject {
             Keys.blockTitleFormat: "Busy - {source_name}",
             Keys.syncAllDayEvents: false,
             Keys.showNotifications: true,
-            Keys.launchAtLogin: false
+            Keys.launchAtLogin: false,
+            Keys.syncRecurringAsSeries: true
         ])
         
         // Load values
@@ -74,6 +82,7 @@ class Settings: ObservableObject {
         self.syncAllDayEvents = defaults.bool(forKey: Keys.syncAllDayEvents)
         self.showNotifications = defaults.bool(forKey: Keys.showNotifications)
         self.launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
+        self.syncRecurringAsSeries = defaults.bool(forKey: Keys.syncRecurringAsSeries)
     }
     
     // MARK: - Reset
@@ -85,5 +94,6 @@ class Settings: ObservableObject {
         syncAllDayEvents = false
         showNotifications = true
         launchAtLogin = false
+        syncRecurringAsSeries = true
     }
 }
