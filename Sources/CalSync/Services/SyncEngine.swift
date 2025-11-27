@@ -416,8 +416,8 @@ class SyncEngine: ObservableObject {
         }
         
         let markerContent = String(notes[startRange.upperBound..<endRange.lowerBound])
-        // Parse: source=XXX:id=YYY
-        let components = markerContent.split(separator: ":")
+        // Parse: source=XXX|id=YYY|recurring=ZZZ (using | as delimiter to avoid conflicts with IDs containing colons)
+        let components = markerContent.split(separator: "|")
         var sourceId: String?
         var eventId: String?
         
@@ -454,7 +454,8 @@ class SyncEngine: ObservableObject {
         }
         
         // Add marker in notes for identification (use seriesId for recurring events)
-        let marker = "\(Self.blockMarkerPrefix)source=\(sourceCalendarId):id=\(syncable.seriesId):recurring=\(syncable.isRecurring)\(Self.blockMarkerSuffix)"
+        // Using | as delimiter to avoid conflicts with IDs that may contain colons
+        let marker = "\(Self.blockMarkerPrefix)source=\(sourceCalendarId)|id=\(syncable.seriesId)|recurring=\(syncable.isRecurring)\(Self.blockMarkerSuffix)"
         block.notes = marker
         
         // Set as busy
@@ -477,9 +478,11 @@ class SyncEngine: ObservableObject {
         // Try to get a friendly account name
         if let source = calendar.source {
             switch source.sourceType {
-            case .exchange:
-                return source.title
-            case .calDAV:
+            case .birthdays:
+                // Don't use source.title for birthday sources - use calendar title instead
+                return calendar.title
+            case .exchange, .calDAV:
+                // For work accounts, use the account/source title
                 return source.title
             default:
                 return calendar.title
@@ -505,6 +508,9 @@ class SyncEngine: ObservableObject {
         let startDate = Calendar.current.date(byAdding: .year, value: -1, to: Date())!
         let endDate = Calendar.current.date(byAdding: .year, value: 1, to: Date())!
         
+        // Track deleted event identifiers to avoid trying to delete the same recurring series multiple times
+        var deletedEventIds = Set<String>()
+        
         for calendar in allCalendars {
             let predicate = eventStore.predicateForEvents(
                 withStart: startDate,
@@ -516,10 +522,29 @@ class SyncEngine: ObservableObject {
             var calendarDeleteCount = 0
             
             for event in events {
+                // Skip if we already deleted this event (or its series)
+                if let eventId = event.eventIdentifier, deletedEventIds.contains(eventId) {
+                    continue
+                }
+                // Also check the external identifier for recurring events
+                if let externalId = event.calendarItemExternalIdentifier, deletedEventIds.contains(externalId) {
+                    continue
+                }
+                
                 if isBlockEvent(event) {
                     do {
-                        try eventStore.remove(event, span: .thisEvent)
+                        // Use .futureEvents for recurring blocks to delete the entire series
+                        let span: EKSpan = event.hasRecurrenceRules ? .futureEvents : .thisEvent
+                        try eventStore.remove(event, span: span)
                         calendarDeleteCount += 1
+                        
+                        // Track both identifiers to avoid duplicate deletion attempts
+                        if let eventId = event.eventIdentifier {
+                            deletedEventIds.insert(eventId)
+                        }
+                        if let externalId = event.calendarItemExternalIdentifier {
+                            deletedEventIds.insert(externalId)
+                        }
                     } catch {
                         Logger.shared.log("Error deleting block: \(error.localizedDescription)")
                     }

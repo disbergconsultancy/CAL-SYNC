@@ -171,6 +171,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var pendingSyncWorkItem: DispatchWorkItem?
     
     @objc private func calendarChanged() {
+        // Don't trigger sync if sync is disabled
+        guard syncEngine.isSyncEnabled else {
+            Logger.shared.log("📅 Calendar changed but sync disabled, ignoring")
+            return
+        }
+        
         // Don't trigger sync if we're already syncing (to prevent loops)
         guard !syncEngine.isSyncing else {
             Logger.shared.log("📅 Calendar changed but sync in progress, ignoring")
