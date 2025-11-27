@@ -7,9 +7,9 @@
     <key>CFBundleExecutable</key>
     <string>CalSync</string>
     <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
+    <string>2d2444e8aa4728fb184fb399f7fc3733_Calendar</string>
     <key>CFBundleIconName</key>
-    <string>AppIcon</string>
+    <string>2d2444e8aa4728fb184fb399f7fc3733_Calendar</string>
     <key>CFBundleIdentifier</key>
     <string>com.calsync.app</string>
     <key>CFBundleInfoDictionaryVersion</key>

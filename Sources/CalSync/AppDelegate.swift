@@ -238,10 +238,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let syncToggle = NSMenuItem(title: "Sync Enabled", action: #selector(toggleSync), keyEquivalent: "")
         syncToggle.tag = 101
         syncToggle.state = .on
+        syncToggle.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
         menu.addItem(syncToggle)
         
         // Sync now
-        menu.addItem(NSMenuItem(title: "Sync Now", action: #selector(syncNow), keyEquivalent: "s"))
+        let syncNowItem = NSMenuItem(title: "Sync Now", action: #selector(syncNow), keyEquivalent: "s")
+        syncNowItem.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil)
+        menu.addItem(syncNowItem)
         
         menu.addItem(NSMenuItem.separator())
         
@@ -250,25 +253,34 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let calendarsSubmenu = NSMenu()
         calendarsItem.submenu = calendarsSubmenu
         calendarsItem.tag = 200
+        calendarsItem.image = NSImage(systemSymbolName: "calendar", accessibilityDescription: nil)
         menu.addItem(calendarsItem)
         
         menu.addItem(NSMenuItem.separator())
         
         // Settings
-        menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
+        menu.addItem(settingsItem)
         
         // View logs
-        menu.addItem(NSMenuItem(title: "View Logs...", action: #selector(viewLogs), keyEquivalent: ""))
+        let viewLogsItem = NSMenuItem(title: "View Logs...", action: #selector(viewLogs), keyEquivalent: "")
+        viewLogsItem.image = NSImage(systemSymbolName: "doc.text", accessibilityDescription: nil)
+        menu.addItem(viewLogsItem)
         
         menu.addItem(NSMenuItem.separator())
         
         // Purge all blocks
-        menu.addItem(NSMenuItem(title: "Purge All Blocks...", action: #selector(purgeAllBlocks), keyEquivalent: ""))
+        let purgeItem = NSMenuItem(title: "Purge All Blocks...", action: #selector(purgeAllBlocks), keyEquivalent: "")
+        purgeItem.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)
+        menu.addItem(purgeItem)
         
         menu.addItem(NSMenuItem.separator())
         
         // Quit
-        menu.addItem(NSMenuItem(title: "Quit CalSync", action: #selector(quitApp), keyEquivalent: "q"))
+        let quitItem = NSMenuItem(title: "Quit CalSync", action: #selector(quitApp), keyEquivalent: "q")
+        quitItem.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
+        menu.addItem(quitItem)
         
         self.statusItem?.menu = menu
         
