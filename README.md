@@ -134,6 +134,18 @@ When scanning calendars, any event containing this marker is recognized as a syn
 
 ## Troubleshooting
 
+### "App is damaged" or "cannot be opened"
+
+CalSync is not notarized by Apple (notarization requires an Apple Developer account). macOS Gatekeeper may show a warning when opening the app.
+
+**Fix:** Remove the quarantine attribute:
+
+```bash
+xattr -cr /Applications/CalSync.app
+```
+
+Then try opening the app again. This is safe - the app is ad-hoc code signed and runs entirely locally.
+
 ### "No calendars found"
 
 - Make sure calendar accounts are added in System Settings > Internet Accounts

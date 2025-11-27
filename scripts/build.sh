@@ -42,6 +42,10 @@ if [ -d "Sources/CalSync/Resources" ]; then
     find "Sources/CalSync/Resources" -type f ! -name "Info.plist" -exec cp {} "$RESOURCES_DIR/" \;
 fi
 
+# Ad-hoc code sign the app bundle
+echo "🔐 Code signing app bundle..."
+codesign --sign - --force --deep "$APP_BUNDLE"
+
 echo "✅ Build complete!"
 echo "📍 App bundle created at: $APP_BUNDLE"
 echo ""

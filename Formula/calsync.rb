@@ -1,6 +1,6 @@
 cask "calsync" do
-  version "1.0.0"
-  sha256 "e8be1408da5d86dd8375c6840f0f87f0ca673dd398233534f58b37618cbb2a71"
+  version "1.0.1"
+  sha256 "4867c7217a251baf71559b8b0e6bd2076ba51dff86e405a0a63a49bd7f19c640"
 
   url "https://github.com/disbergconsultancy/CAL-SYNC/releases/download/v#{version}/CalSync-#{version}.zip"
   name "CalSync"
@@ -12,8 +12,20 @@ cask "calsync" do
 
   app "CalSync.app"
 
+  postflight do
+    # Remove quarantine attribute to prevent "damaged app" warning
+    system_command "/usr/bin/xattr",
+                   args: ["-cr", "#{appdir}/CalSync.app"],
+                   sudo: false
+  end
+
   zap trash: [
     "~/Library/Preferences/com.disbergconsultancy.CalSync.plist",
     "~/Library/Application Support/CalSync",
   ]
+
+  caveats <<~EOS
+    CalSync is not notarized by Apple. If you see "app is damaged" warning:
+      xattr -cr /Applications/CalSync.app
+  EOS
 end
