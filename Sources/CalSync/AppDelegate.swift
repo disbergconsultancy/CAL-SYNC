@@ -331,10 +331,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
               let syncStatusItem = menu.item(withTag: 100) else { return }
         
         if let lastSync = syncEngine.lastSyncTime {
-            let formatter = RelativeDateTimeFormatter()
-            formatter.unitsStyle = .abbreviated
-            let relativeTime = formatter.localizedString(for: lastSync, relativeTo: Date())
-            syncStatusItem.title = "Last sync: \(relativeTime)"
+            let formatter = DateFormatter()
+            let calendar = Calendar.current
+            
+            // Check if the sync was today
+            if calendar.isDateInToday(lastSync) {
+                formatter.dateFormat = "HH:mm"
+                syncStatusItem.title = "Last sync: Today at \(formatter.string(from: lastSync))"
+            } else if calendar.isDateInYesterday(lastSync) {
+                formatter.dateFormat = "HH:mm"
+                syncStatusItem.title = "Last sync: Yesterday at \(formatter.string(from: lastSync))"
+            } else {
+                formatter.dateFormat = "MMM d 'at' HH:mm"
+                syncStatusItem.title = "Last sync: \(formatter.string(from: lastSync))"
+            }
         } else {
             syncStatusItem.title = "Last sync: Never"
         }

@@ -286,8 +286,6 @@ class SyncEngine: ObservableObject {
         defer { 
             isSyncing = false
             lastSyncCompletedTime = Date()
-            // Clear pending changes after sync
-            pendingChanges = PendingSyncChanges()
         }
         
         Logger.shared.log("Starting sync...")
@@ -394,6 +392,12 @@ class SyncEngine: ObservableObject {
         if blocksCreated > 0 || blocksDeleted > 0 {
             sendNotification(created: blocksCreated, updated: blocksUpdated, deleted: blocksDeleted)
         }
+        
+        // Recalculate pending changes after sync to verify everything is in sync
+        // This also ensures the UI shows accurate pending count immediately
+        // Note: We need to set isSyncing = false first to allow the calculation
+        isSyncing = false
+        await calculatePendingChanges()
     }
     
     // MARK: - Block Management
