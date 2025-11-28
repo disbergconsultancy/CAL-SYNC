@@ -7,24 +7,24 @@ class Logger {
     
     private let logFileURL: URL
     private let dateFormatter: DateFormatter
-    private let queue = DispatchQueue(label: "com.calsync.logger", qos: .utility)
+    private let queue = DispatchQueue(label: "com.nomas.logger", qos: .utility)
     
     private init() {
         // Create log file in Application Support directory
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let appDirectory = appSupport.appendingPathComponent("CalSync", isDirectory: true)
+        let appDirectory = appSupport.appendingPathComponent("NoMas", isDirectory: true)
         
         // Create directory if needed
         try? FileManager.default.createDirectory(at: appDirectory, withIntermediateDirectories: true)
         
-        logFileURL = appDirectory.appendingPathComponent("calsync.log")
+        logFileURL = appDirectory.appendingPathComponent("nomas.log")
         
         dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
         
         // Add startup marker
         log("========================================")
-        log("CalSync started")
+        log("No Mas! started")
         log("========================================")
     }
     

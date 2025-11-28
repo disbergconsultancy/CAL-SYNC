@@ -254,7 +254,7 @@ No Mas!:
 - ✅ Does not send any data to external servers
 - ✅ Only creates "Busy" blocks (no event details copied)
 - ✅ Stores settings in local UserDefaults
-- ✅ Logs stored locally in ~/Library/Application Support/NoMas/
+- ✅ Logs stored locally in `~/Library/Application Support/NoMas/`
 
 ## License
 

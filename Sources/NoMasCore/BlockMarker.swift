@@ -1,6 +1,6 @@
 import Foundation
 
-/// Utilities for handling CalSync block markers
+/// Utilities for handling NoMas block markers
 /// These markers are embedded in event notes to identify synced blocks and prevent sync loops
 public struct BlockMarker {
     
@@ -8,9 +8,9 @@ public struct BlockMarker {
     public static let prefix = "<!-- CALSYNC:BLOCK:"
     public static let suffix = " -->"
     
-    /// Check if notes contain a CalSync block marker
+    /// Check if notes contain a NoMas block marker
     /// - Parameter notes: The event notes to check
-    /// - Returns: True if the notes contain a CalSync marker
+    /// - Returns: True if the notes contain a NoMas marker
     public static func containsMarker(_ notes: String?) -> Bool {
         guard let notes = notes else { return false }
         return notes.contains(prefix)

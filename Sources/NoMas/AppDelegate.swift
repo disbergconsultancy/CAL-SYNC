@@ -158,7 +158,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private func showCalendarAccessAlert() {
         let alert = NSAlert()
         alert.messageText = "Calendar Access Required"
-        alert.informativeText = "CalSync needs access to your calendars to sync busy blocks. Please grant access in System Settings > Privacy & Security > Calendars."
+        alert.informativeText = "No Mas! needs access to your calendars to sync busy blocks. Please grant access in System Settings > Privacy & Security > Calendars."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Open System Settings")
         alert.addButton(withTitle: "Cancel")
@@ -220,7 +220,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let menu = NSMenu()
         
         // Status header
-        let statusItem = NSMenuItem(title: "CalSync", action: nil, keyEquivalent: "")
+        let statusItem = NSMenuItem(title: "No Mas!", action: nil, keyEquivalent: "")
         statusItem.isEnabled = false
         menu.addItem(statusItem)
         
@@ -284,7 +284,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         menu.addItem(NSMenuItem.separator())
         
         // Quit
-        let quitItem = NSMenuItem(title: "Quit CalSync", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit No Mas!", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
         menu.addItem(quitItem)
         
@@ -499,7 +499,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let hostingController = NSHostingController(rootView: settingsView)
         
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "CalSync Settings"
+        window.title = "No Mas! Settings"
         window.styleMask = [.titled, .closable]
         window.setContentSize(NSSize(width: 450, height: 350))
         window.center()
@@ -520,7 +520,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @objc private func purgeAllBlocks() {
         let alert = NSAlert()
         alert.messageText = "Purge All Blocks?"
-        alert.informativeText = "This will delete ALL CalSync-created busy blocks from ALL your calendars. This action cannot be undone.\n\nUse this to clean up after a sync issue or to start fresh."
+        alert.informativeText = "This will delete ALL No Mas!-created busy blocks from ALL your calendars. This action cannot be undone.\n\nUse this to clean up after a sync issue or to start fresh."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Purge All Blocks")
         alert.addButton(withTitle: "Cancel")
@@ -537,7 +537,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 DispatchQueue.main.async {
                     let resultAlert = NSAlert()
                     resultAlert.messageText = "Purge Complete"
-                    resultAlert.informativeText = "Deleted \(deletedCount) CalSync blocks from your calendars."
+                    resultAlert.informativeText = "Deleted \(deletedCount) No Mas! blocks from your calendars."
                     resultAlert.alertStyle = .informational
                     resultAlert.addButton(withTitle: "OK")
                     resultAlert.runModal()

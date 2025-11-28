@@ -106,7 +106,7 @@ struct CalendarsSettingsView: View {
                         .foregroundColor(.secondary)
                     Text("No calendars found")
                         .font(.headline)
-                    Text("Make sure you have calendars added in the macOS Calendar app and have granted calendar access to CalSync.")
+                    Text("Make sure you have calendars added in the macOS Calendar app and have granted calendar access to No Mas!.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
@@ -195,7 +195,7 @@ struct AboutView: View {
                 .font(.system(size: 64))
                 .foregroundColor(.accentColor)
             
-            Text("CalSync")
+            Text("No Mas!")
                 .font(.largeTitle)
                 .fontWeight(.bold)
             

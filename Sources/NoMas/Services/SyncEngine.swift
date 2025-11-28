@@ -497,11 +497,11 @@ class SyncEngine: ObservableObject {
     
     // MARK: - Purge All Blocks
     
-    /// Removes ALL CalSync-created blocks from ALL calendars
+    /// Removes ALL NoMas-created blocks from ALL calendars
     /// Use this to clean up after bugs or when you want to start fresh
     @MainActor
     func purgeAllBlocks() async -> Int {
-        Logger.shared.log("Starting purge of all CalSync blocks...")
+        Logger.shared.log("Starting purge of all NoMas blocks...")
         
         var totalDeleted = 0
         
@@ -602,10 +602,10 @@ class SyncEngine: ObservableObject {
         var events = eventStore.events(matching: predicate)
         
         // Filter out:
-        // 1. CalSync-created blocks (we only show real events)
+        // 1. NoMas-created blocks (we only show real events)
         // 2. Canceled events
         events = events.filter { event in
-            // Skip CalSync blocks
+            // Skip NoMas blocks
             if isBlockEvent(event) {
                 return false
             }
@@ -635,7 +635,7 @@ class SyncEngine: ObservableObject {
             if events.contains(where: { $0.eventIdentifier == event.eventIdentifier }) {
                 continue
             }
-            // Skip CalSync blocks
+            // Skip NoMas blocks
             if isBlockEvent(event) {
                 continue
             }
@@ -707,9 +707,9 @@ class SyncEngine: ObservableObject {
         
         var events = eventStore.events(matching: predicate)
         
-        // Filter out CalSync blocks and canceled events
+        // Filter out NoMas blocks and canceled events
         events = events.filter { event in
-            // Skip CalSync blocks
+            // Skip NoMas blocks
             if isBlockEvent(event) {
                 return false
             }
@@ -772,7 +772,7 @@ class SyncEngine: ObservableObject {
         guard settings.showNotifications else { return }
         
         let content = UNMutableNotificationContent()
-        content.title = "CalSync"
+        content.title = "No Mas!"
         
         var changes: [String] = []
         if created > 0 { changes.append("\(created) created") }
