@@ -5,10 +5,12 @@ import UserNotifications
 
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var statusItem: NSStatusItem?
-    var popover: NSPopover?
+    var agendaPopover: NSPopover?
     var settingsWindow: NSWindow?
+    var contextMenu: NSMenu?
     let syncEngine = SyncEngine()
     private var pendingCheckTimer: Timer?
+    private var eventMonitor: Any?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide dock icon - this is a menu bar only app
@@ -206,11 +208,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         if let button = statusItem?.button {
             button.image = NSImage(systemSymbolName: "calendar.badge.clock", accessibilityDescription: "CalSync")
-            button.action = #selector(togglePopover)
+            button.action = #selector(statusBarButtonClicked(_:))
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.target = self
         }
         
-        // Create menu
+        // Create the agenda popover
+        setupAgendaPopover()
+        
+        // Create menu (for right-click)
         let menu = NSMenu()
         
         // Status header
@@ -282,7 +288,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         quitItem.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
         menu.addItem(quitItem)
         
-        self.statusItem?.menu = menu
+        // Store menu but don't assign it (we'll show it manually on right-click)
+        // This allows left-click to trigger our action instead of showing menu
+        self.statusItem?.menu = nil
+        
+        // Store menu reference for later use
+        self.contextMenu = menu
         
         // Update menu when sync state changes
         syncEngine.$lastSyncTime
@@ -312,7 +323,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     
     private func updatePendingStatus() {
         // Update menu item
-        if let menu = statusItem?.menu,
+        if let menu = contextMenu,
            let pendingStatusItem = menu.item(withTag: 102) {
             let changes = syncEngine.pendingChanges
             if changes.isEmpty {
@@ -327,7 +338,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
     
     private func updateSyncStatus() {
-        guard let menu = statusItem?.menu,
+        guard let menu = contextMenu,
               let syncStatusItem = menu.item(withTag: 100) else { return }
         
         if let lastSync = syncEngine.lastSyncTime {
@@ -351,7 +362,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
     
     private func updateCalendarsMenu() {
-        guard let menu = statusItem?.menu,
+        guard let menu = contextMenu,
               let calendarsItem = menu.item(withTag: 200),
               let submenu = calendarsItem.submenu else { return }
         
@@ -393,8 +404,61 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         return image
     }
     
-    @objc private func togglePopover() {
-        // Currently using menu instead of popover
+    // MARK: - Agenda Popover
+    
+    private func setupAgendaPopover() {
+        let popover = NSPopover()
+        popover.contentSize = NSSize(width: 240, height: 380)
+        popover.behavior = .transient
+        popover.animates = true
+        
+        let agendaView = TodayAgendaView(syncEngine: syncEngine)
+        popover.contentViewController = NSHostingController(rootView: agendaView)
+        
+        agendaPopover = popover
+    }
+    
+    @objc private func statusBarButtonClicked(_ sender: NSStatusBarButton) {
+        guard let event = NSApp.currentEvent else { return }
+        
+        if event.type == .rightMouseUp {
+            // Right-click: show menu
+            showMenu()
+        } else {
+            // Left-click: show agenda popover
+            toggleAgendaPopover()
+        }
+    }
+    
+    private func showMenu() {
+        guard let button = statusItem?.button,
+              let menu = contextMenu else { return }
+        
+        // Temporarily set menu and trigger it
+        statusItem?.menu = menu
+        button.performClick(nil)
+        
+        // This ensures the menu closes properly
+        DispatchQueue.main.async { [weak self] in
+            self?.statusItem?.menu = nil
+        }
+    }
+    
+    private func toggleAgendaPopover() {
+        guard let button = statusItem?.button else { return }
+        
+        if let popover = agendaPopover {
+            if popover.isShown {
+                popover.performClose(nil)
+            } else {
+                popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+                
+                // Set up event monitor to close popover when clicking outside
+                eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                    self?.agendaPopover?.performClose(nil)
+                }
+            }
+        }
     }
     
     @objc private func toggleSync(_ sender: NSMenuItem) {

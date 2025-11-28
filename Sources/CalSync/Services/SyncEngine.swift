@@ -565,6 +565,96 @@ class SyncEngine: ObservableObject {
         return totalDeleted
     }
     
+    // MARK: - Event Fetching for Agenda View
+    
+    /// Fetches events for a specific day within the given hour range
+    /// Returns events from ENABLED calendars only for display in the agenda view
+    func fetchEvents(for date: Date, startHour: Int, endHour: Int) -> [EKEvent] {
+        let calendar = Calendar.current
+        
+        // Get start of the day
+        let startOfDay = calendar.startOfDay(for: date)
+        
+        // Handle 24-hour case (endHour of 24 means end of day)
+        let actualEndHour = endHour == 24 ? 23 : endHour
+        let endMinute = endHour == 24 ? 59 : 0
+        
+        // Set start time to startHour
+        guard let dayStart = calendar.date(bySettingHour: startHour, minute: 0, second: 0, of: startOfDay),
+              let dayEnd = calendar.date(bySettingHour: actualEndHour, minute: endMinute, second: 59, of: startOfDay) else {
+            return []
+        }
+        
+        // Get ENABLED calendars only for display
+        let enabledCalendars = calendars.filter { enabledCalendarIds.contains($0.calendarIdentifier) }
+        
+        // If no calendars are enabled, return empty
+        guard !enabledCalendars.isEmpty else {
+            return []
+        }
+        
+        let predicate = eventStore.predicateForEvents(
+            withStart: dayStart,
+            end: dayEnd,
+            calendars: enabledCalendars
+        )
+        
+        var events = eventStore.events(matching: predicate)
+        
+        // Filter out:
+        // 1. CalSync-created blocks (we only show real events)
+        // 2. Canceled events
+        events = events.filter { event in
+            // Skip CalSync blocks
+            if isBlockEvent(event) {
+                return false
+            }
+            // Skip canceled events
+            if event.status == .canceled {
+                return false
+            }
+            return true
+        }
+        
+        // Also include events that overlap with this time range but start earlier
+        // or end later (they should still be visible)
+        let extendedStart = calendar.date(byAdding: .hour, value: -12, to: dayStart)!
+        let extendedEnd = calendar.date(byAdding: .hour, value: 12, to: dayEnd)!
+        
+        let extendedPredicate = eventStore.predicateForEvents(
+            withStart: extendedStart,
+            end: extendedEnd,
+            calendars: enabledCalendars
+        )
+        
+        let extendedEvents = eventStore.events(matching: extendedPredicate)
+        
+        // Add events that overlap with our time range but weren't in the original query
+        for event in extendedEvents {
+            // Skip if already included
+            if events.contains(where: { $0.eventIdentifier == event.eventIdentifier }) {
+                continue
+            }
+            // Skip CalSync blocks
+            if isBlockEvent(event) {
+                continue
+            }
+            // Skip canceled events
+            if event.status == .canceled {
+                continue
+            }
+            // Check if event overlaps with our display range
+            if event.startDate < dayEnd && event.endDate > dayStart {
+                events.append(event)
+            }
+        }
+        
+        // Sort by start time
+        events.sort { $0.startDate < $1.startDate }
+        
+        return events
+    }
+    
     // MARK: - Notifications
     
     private func sendNotification(created: Int, updated: Int, deleted: Int) {
