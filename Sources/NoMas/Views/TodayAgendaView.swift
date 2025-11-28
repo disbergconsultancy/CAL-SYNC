@@ -284,31 +284,24 @@ struct TodayAgendaView: View {
     private var nowIndicator: some View {
         let yPosition = positionForTime(Date())
         
-        return HStack(spacing: 0) {
-            // Time label with background pill
+        return HStack(spacing: 4) {
+            // Time label (no background, just red text)
             Text(currentTimeString)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(.white)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
-                .background(
-                    Capsule()
-                        .fill(Color.red)
-                )
-                .frame(width: timelineWidth + 8, alignment: .trailing)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(.red)
+                .frame(width: timelineWidth, alignment: .trailing)
             
-            // Red dot at line start
+            // Small red dot at line start
             Circle()
                 .fill(Color.red)
-                .frame(width: 8, height: 8)
-                .offset(x: -4)
+                .frame(width: 6, height: 6)
             
             // Line - thicker for visibility
             Rectangle()
                 .fill(Color.red)
                 .frame(height: 2)
         }
-        .offset(y: yPosition - 5)
+        .offset(y: yPosition - 4)
         .id("nowIndicator")
     }
     
